@@ -1,0 +1,6 @@
+{
+  "name": "VitalControl",
+  "description": "Sistema de Registro y Monitoreo de Signos Vitales orientado al personal sanitario para el control clínico y seguimiento de pacientes con hipertensión arterial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

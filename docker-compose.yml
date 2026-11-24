@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vitalcontrol_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vitalcontrol
+      POSTGRES_USER: vitalcontrol_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_local_dev}
+      TZ: America/Guayaquil
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./supabase/migrations/0001_initial_schema.sql:/docker-entrypoint-initdb.d/0001_initial_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vitalcontrol_user -d vitalcontrol"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vitalcontrol_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TZ: America/Guayaquil
+      DATABASE_URL: ${DATABASE_URL:-postgresql://vitalcontrol_user:changeme_local_dev@postgres:5432/vitalcontrol}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://vitalcontrol_user:changeme_local_dev@postgres:5432/vitalcontrol}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

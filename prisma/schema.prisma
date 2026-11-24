@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Organization {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String               @unique @db.VarChar(40)
+  nombre      String               @db.VarChar(180)
+  tipo        String               @default("Centro de Salud") @db.VarChar(80)
+  ciudad      String               @db.VarChar(100)
+  provincia   String               @db.VarChar(100)
+  altitudMsnm Int                  @default(100) @map("altitud_msnm")
+  telefono    String?              @db.VarChar(30)
+  direccion   String?
+  activo      Boolean              @default(true)
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime             @default(now()) @map("updated_at") @db.Timestamptz
+  members     OrganizationMember[]
+  patients    Patient[]
+  vitalSigns  VitalSign[]
+  appointments Appointment[]
+
+  @@map("organizations")
+}
+
+model UserRole {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String    @unique @db.VarChar(40)
+  nombre      String    @db.VarChar(80)
+  descripcion String
+  permisos    Json      @default("[]")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  profiles    Profile[]
+
+  @@map("user_roles")
+}
+
+model Profile {
+  id                        String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleId                    String                @map("role_id") @db.Uuid
+  email                     String                @unique @db.VarChar(180)
+  nombres                   String                @db.VarChar(120)
+  apellidos                 String                @db.VarChar(120)
+  numeroRegistroProfesional String?               @map("numero_registro_profesional") @db.VarChar(60)
+  especialidad              String?               @db.VarChar(120)
+  passwordHash              String                @map("password_hash")
+  mfaEnabled                Boolean               @default(false) @map("mfa_enabled")
+  mfaSecretEnc              String?               @map("mfa_secret_enc")
+  failedLoginAttempts       Int                   @default(0) @map("failed_login_attempts")
+  lockedUntil               DateTime?             @map("locked_until") @db.Timestamptz
+  mustChangePassword        Boolean               @default(false) @map("must_change_password")
+  recoveryTokenHash         String?               @map("recovery_token_hash")
+  recoveryExpiresAt         DateTime?             @map("recovery_expires_at") @db.Timestamptz
+  activo                    Boolean               @default(true)
+  lastLoginAt               DateTime?             @map("last_login_at") @db.Timestamptz
+  createdAt                 DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime              @default(now()) @map("updated_at") @db.Timestamptz
+  role                      UserRole              @relation(fields: [roleId], references: [id])
+  organizations             OrganizationMember[]
+  patientAssignments        PatientAssignment[]
+  vitalSignsRecorded        VitalSign[]
+  hypertensionFollowups     HypertensionFollowup[]
+  auditLogs                 AuditLog[]
+
+  @@map("profiles")
+}
+
+model OrganizationMember {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  profileId      String       @map("profile_id") @db.Uuid
+  esPrincipal    Boolean      @default(false) @map("es_principal")
+  activo         Boolean      @default(true)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  profile        Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, profileId])
+  @@map("organization_members")
+}
+
+model Patient {
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigoInterno            String                 @unique @map("codigo_interno") @db.VarChar(30)
+  tipoIdentificacion       String                 @map("tipo_identificacion") @db.VarChar(30)
+  numeroIdentificacion     String                 @unique @map("numero_identificacion") @db.VarChar(40)
+  numeroHistoriaClinica    String                 @unique @map("numero_historia_clinica") @db.VarChar(50)
+  nombres                  String                 @db.VarChar(120)
+  apellidos                String                 @db.VarChar(120)
+  fechaNacimiento          DateTime               @map("fecha_nacimiento") @db.Date
+  sexo                     String                 @db.VarChar(20)
+  telefonoEnc              String?                @map("telefono_enc")
+  direccionEnc             String?                @map("direccion_enc")
+  contactoEmergenciaEnc    String?                @map("contacto_emergencia_enc")
+  organizationId           String                 @map("organization_id") @db.Uuid
+  antecedenteHta           Boolean                @default(false) @map("antecedente_hta")
+  antecedenteDiabetes      Boolean                @default(false) @map("antecedente_diabetes")
+  embarazoActual           Boolean                @default(false) @map("embarazo_actual")
+  condicionClinicaEspecial String?                @map("condicion_clinica_especial") @db.VarChar(120)
+  otrosAntecedentes        String?                @map("otros_antecedentes")
+  observacionesEnc         String?                @map("observaciones_enc")
+  activo                   Boolean                @default(true)
+  createdBy                String?                @map("created_by") @db.Uuid
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                DateTime               @default(now()) @map("updated_at") @db.Timestamptz
+  organization             Organization           @relation(fields: [organizationId], references: [id])
+  assignments              PatientAssignment[]
+  medicalHistory           MedicalHistory[]
+  vitalSigns               VitalSign[]
+  hypertensionFollowups    HypertensionFollowup[]
+  clinicalAlerts           ClinicalAlert[]
+  appointments             Appointment[]
+
+  @@map("patients")
+}
+
+model PatientAssignment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patientId  String   @map("patient_id") @db.Uuid
+  profileId  String   @map("profile_id") @db.Uuid
+  tipoAcceso String   @default("titular") @map("tipo_acceso") @db.VarChar(30)
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, profileId])
+  @@map("patient_assignments")
+}
+
+model MedicalHistory {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patientId       String   @map("patient_id") @db.Uuid
+  tipoRegistro    String   @map("tipo_registro") @db.VarChar(40)
+  titulo          String   @db.VarChar(160)
+  detalle         String
+  datosAnteriores Json?    @map("datos_anteriores")
+  datosNuevos     Json?    @map("datos_nuevos")
+  recordedBy      String?  @map("recorded_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("medical_history")
+}
+
+model ClinicalRule {
+  id                    String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo                String          @unique @db.VarChar(60)
+  parametro             String          @db.VarChar(50)
+  nombre                String          @db.VarChar(160)
+  fuenteClinica         String          @map("fuente_clinica") @db.VarChar(200)
+  versionGuia           String          @map("version_guia") @db.VarChar(60)
+  poblacionAplicable    String          @map("poblacion_aplicable") @db.VarChar(160)
+  condicionEspecial     String          @default("general") @map("condicion_especial") @db.VarChar(80)
+  altitudMinMsnm        Int?            @map("altitud_min_msnm")
+  edadMinAnios          Int?            @map("edad_min_anios")
+  edadMaxAnios          Int?            @map("edad_max_anios")
+  rangoVerdeMin         Decimal?        @map("rango_verde_min") @db.Decimal(8, 2)
+  rangoVerdeMax         Decimal?        @map("rango_verde_max") @db.Decimal(8, 2)
+  rangoAmarilloMin      Decimal?        @map("rango_amarillo_min") @db.Decimal(8, 2)
+  rangoAmarilloMax      Decimal?        @map("rango_amarillo_max") @db.Decimal(8, 2)
+  rangoNaranjaMin       Decimal?        @map("rango_naranja_min") @db.Decimal(8, 2)
+  rangoNaranjaMax       Decimal?        @map("rango_naranja_max") @db.Decimal(8, 2)
+  rangoRojoMin          Decimal?        @map("rango_rojo_min") @db.Decimal(8, 2)
+  rangoRojoMax          Decimal?        @map("rango_rojo_max") @db.Decimal(8, 2)
+  unidad                String          @db.VarChar(20)
+  recomendacionAmarillo String          @map("recomendacion_amarillo")
+  recomendacionNaranja  String          @map("recomendacion_naranja")
+  recomendacionRojo     String          @map("recomendacion_rojo")
+  responsableAprobacion String          @map("responsable_aprobacion") @db.VarChar(160)
+  fechaActualizacion    DateTime        @map("fecha_actualizacion") @db.Date
+  activa                Boolean         @default(true)
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  alerts                ClinicalAlert[]
+
+  @@map("clinical_rules")
+}
+
+model VitalSign {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientSubmissionId     String?                @unique @map("client_submission_id") @db.VarChar(100)
+  patientId              String                 @map("patient_id") @db.Uuid
+  organizationId         String                 @map("organization_id") @db.Uuid
+  recordedBy             String                 @map("recorded_by") @db.Uuid
+  fechaMedicion          DateTime               @map("fecha_medicion") @db.Timestamptz
+  protocoloPa            String                 @default("promedio_todas") @map("protocolo_pa") @db.VarChar(60)
+  pasPromedio            Decimal?               @map("pas_promedio") @db.Decimal(6, 2)
+  padPromedio            Decimal?               @map("pad_promedio") @db.Decimal(6, 2)
+  pamEstimada            Decimal?               @map("pam_estimada") @db.Decimal(6, 2)
+  presionPulso           Decimal?               @map("presion_pulso") @db.Decimal(6, 2)
+  variacionPas           Decimal?               @map("variacion_pas") @db.Decimal(6, 2)
+  variacionPad           Decimal?               @map("variacion_pad") @db.Decimal(6, 2)
+  frecuenciaCardiaca     Decimal?               @map("frecuencia_cardiaca") @db.Decimal(6, 2)
+  frecuenciaRespiratoria Decimal?               @map("frecuencia_respiratoria") @db.Decimal(6, 2)
+  temperaturaC           Decimal?               @map("temperatura_c") @db.Decimal(5, 2)
+  saturacionO2           Decimal?               @map("saturacion_o2") @db.Decimal(5, 2)
+  oxigenoSuplementario   Boolean?               @map("oxigeno_suplementario")
+  pesoKg                 Decimal?               @map("peso_kg") @db.Decimal(6, 2)
+  tallaCm                Decimal?               @map("talla_cm") @db.Decimal(6, 2)
+  imc                    Decimal?               @db.Decimal(5, 2)
+  glucemiaMgDl           Decimal?               @map("glucemia_mg_dl") @db.Decimal(6, 2)
+  condicionGlucemia      String?                @map("condicion_glucemia") @db.VarChar(30)
+  escalaDolor            Int?                   @map("escala_dolor")
+  sintomasReferidos      String?                @map("sintomas_referidos")
+  observacionesClinicas  String?                @map("observaciones_clinicas")
+  conductaProfesional    String?                @map("conducta_profesional")
+  proximoControlFecha    DateTime?              @map("proximo_control_fecha") @db.Date
+  nivelAlertaGlobal      String                 @default("gris") @map("nivel_alerta_global") @db.VarChar(20)
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  patient                Patient                @relation(fields: [patientId], references: [id])
+  organization           Organization           @relation(fields: [organizationId], references: [id])
+  recorder               Profile                @relation(fields: [recordedBy], references: [id])
+  bpReadings             BloodPressureReading[]
+  alerts                 ClinicalAlert[]
+  amendments             VitalSignAmendment[]
+
+  @@map("vital_signs")
+}
+
+model BloodPressureReading {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vitalSignId        String    @map("vital_sign_id") @db.Uuid
+  numeroMedicion     Int       @map("numero_medicion")
+  pasMmhg            Decimal   @map("pas_mmhg") @db.Decimal(6, 2)
+  padMmhg            Decimal   @map("pad_mmhg") @db.Decimal(6, 2)
+  brazo              String    @db.VarChar(20)
+  posicion           String    @db.VarChar(20)
+  tamanoManguito     String    @map("tamano_manguito") @db.VarChar(30)
+  tiempoReposoMin    Int       @default(5) @map("tiempo_reposo_min")
+  tipoDispositivo    String    @map("tipo_dispositivo") @db.VarChar(60)
+  lugarMedicion      String    @map("lugar_medicion") @db.VarChar(30)
+  incluidaEnPromedio Boolean   @default(true) @map("incluida_en_promedio")
+  measuredAt         DateTime  @default(now()) @map("measured_at") @db.Timestamptz
+  vitalSign          VitalSign @relation(fields: [vitalSignId], references: [id], onDelete: Cascade)
+
+  @@map("blood_pressure_readings")
+}
+
+model VitalSignAmendment {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vitalSignId      String    @map("vital_sign_id") @db.Uuid
+  campoModificado  String    @map("campo_modificado") @db.VarChar(80)
+  valorAnterior    String?   @map("valor_anterior")
+  valorNuevo       String    @map("valor_nuevo")
+  motivoCorreccion String    @map("motivo_correccion")
+  amendedBy        String    @map("amended_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  vitalSign        VitalSign @relation(fields: [vitalSignId], references: [id], onDelete: Cascade)
+
+  @@map("vital_sign_amendments")
+}
+
+model HypertensionFollowup {
+  id                         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patientId                  String    @map("patient_id") @db.Uuid
+  recordedBy                 String    @map("recorded_by") @db.Uuid
+  fechaRegistro              DateTime  @default(now()) @map("fecha_registro") @db.Timestamptz
+  fechaDiagnostico           DateTime? @map("fecha_diagnostico") @db.Date
+  antecedentesFamiliaresHta  Boolean   @default(false) @map("antecedentes_familiares_hta")
+  tratamientoAntihipertensivo String?  @map("tratamiento_antihipertensivo")
+  adherenciaTratamiento      String    @map("adherencia_tratamiento") @db.VarChar(30)
+  actividadFisica            String    @map("actividad_fisica") @db.VarChar(30)
+  consumoTabaco              String    @map("consumo_tabaco") @db.VarChar(30)
+  consumoAlcohol             String    @map("consumo_alcohol") @db.VarChar(30)
+  consumoSal                 String    @map("consumo_sal") @db.VarChar(30)
+  factoresRiesgoCv           Json      @default("[]") @map("factores_riesgo_cv")
+  controlesDomiciliariosTexto String?  @map("controles_domiciliarios_texto")
+  metaPasMmhg                Int?      @map("meta_pas_mmhg")
+  metaPadMmhg                Int?      @map("meta_pad_mmhg")
+  proximaCita                DateTime? @map("proxima_cita") @db.Date
+  observaciones              String?
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  patient                    Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  recorder                   Profile   @relation(fields: [recordedBy], references: [id])
+
+  @@map("hypertension_followups")
+}
+
+model ClinicalAlert {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vitalSignId      String        @map("vital_sign_id") @db.Uuid
+  patientId        String        @map("patient_id") @db.Uuid
+  ruleId           String?       @map("rule_id") @db.Uuid
+  parametro        String        @db.VarChar(50)
+  valorRegistrado  Decimal?      @map("valor_registrado") @db.Decimal(8, 2)
+  unidad           String        @db.VarChar(20)
+  nivel            String        @db.VarChar(20)
+  mensaje          String
+  recomendacion    String
+  estado           String        @default("pendiente") @db.VarChar(20)
+  revisadoPor      String?       @map("revisado_por") @db.Uuid
+  revisadoEn       DateTime?     @map("revisado_en") @db.Timestamptz
+  conductaAdoptada String?       @map("conducta_adoptada")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  vitalSign        VitalSign     @relation(fields: [vitalSignId], references: [id], onDelete: Cascade)
+  patient          Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  rule             ClinicalRule? @relation(fields: [ruleId], references: [id])
+
+  @@map("clinical_alerts")
+}
+
+model Appointment {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patientId       String       @map("patient_id") @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  assignedTo      String?      @map("assigned_to") @db.Uuid
+  fechaProgramada DateTime     @map("fecha_programada") @db.Date
+  motivo          String       @db.VarChar(200)
+  estado          String       @default("pendiente") @db.VarChar(30)
+  notas           String?
+  createdBy       String?      @map("created_by") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("appointments")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId  String?  @map("profile_id") @db.Uuid
+  actorEmail String?  @map("actor_email") @db.VarChar(180)
+  actorRole  String?  @map("actor_role") @db.VarChar(40)
+  accion     String   @db.VarChar(80)
+  recurso    String   @db.VarChar(80)
+  recursoId  String?  @map("recurso_id") @db.VarChar(100)
+  detalle    Json     @default("{}")
+  ipAddress  String?  @map("ip_address") @db.VarChar(80)
+  userAgent  String?  @map("user_agent")
+  resultado  String   @default("exitoso") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  profile    Profile? @relation(fields: [profileId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  clave       String   @id @db.VarChar(80)
+  valor       String
+  descripcion String
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@map("system_settings")
+}
